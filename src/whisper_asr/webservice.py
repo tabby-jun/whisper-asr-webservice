@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI, File, UploadFile, Query
+from fastapi import FastAPI, File, UploadFile, Query, Body
 from fastapi.responses import StreamingResponse
 import whisper
 from whisper.utils import write_srt, write_vtt
@@ -11,6 +11,7 @@ import numpy as np
 from io import StringIO
 from threading import Lock
 import torch
+import uuid
 
 SAMPLE_RATE=16000
 
@@ -31,8 +32,7 @@ def transcribe_file(
 
     return result
 
-
-@app.post("/detect-language")
+@app.post("/asr-detect-language")
 def language_detection(
                 audio_file: UploadFile = File(...),
                 ):
@@ -41,12 +41,18 @@ def language_detection(
     audio = load_audio(audio_file.file)
     audio = whisper.pad_or_trim(audio)
 
+    if torch.cuda.is_available():
+        model = whisper.load_model(model_name).cuda()
+    else:
+        model = whisper.load_model(model_name)
+
     # make log-Mel spectrogram and move to the same device as the model
     mel = whisper.log_mel_spectrogram(audio).to(model.device)
 
     # detect the spoken language
     with model_lock:
         _, probs = model.detect_language(mel)
+    del model
     detected_lang_code = max(probs, key=probs.get)
     
     result = { "detected_language": LANGUAGES[detected_lang_code],
@@ -55,36 +61,32 @@ def language_detection(
     return result
 
 
-@app.post("/get-srt", response_class=StreamingResponse)
-def transcribe_file2srt(
-                audio_file: UploadFile = File(...),
-                task : Union[str, None] = Query(default="transcribe", enum=["transcribe", "translate"]),
-                language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
-                ):
+@app.post("/asr-srt", response_class=StreamingResponse)
+def result2srt(
+        payload: dict = Body(...)
+):
 
-    result = run_asr(audio_file.file, task, language)
+    result = payload
     
     srt_file = StringIO()
     write_srt(result["segments"], file = srt_file)
     srt_file.seek(0)
-    srt_filename = f"{audio_file.filename.split('.')[0]}.srt"
+    srt_filename = f"{uuid.uuid4()}.srt"
     return StreamingResponse(srt_file, media_type="text/plain", 
                              headers={'Content-Disposition': f'attachment; filename="{srt_filename}"'})
 
 
-@app.post("/get-vtt", response_class=StreamingResponse)
-def transcribe_file2vtt(
-                audio_file: UploadFile = File(...),
-                task : Union[str, None] = Query(default="transcribe", enum=["transcribe", "translate"]),
-                language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
-                ):
+@app.post("/asr-vtt", response_class=StreamingResponse)
+def result2vtt(
+        payload: dict = Body(...)
+):
 
-    result = run_asr(audio_file.file, task, language)
+    result = payload
     
     vtt_file = StringIO()
     write_vtt(result["segments"], file = vtt_file)
     vtt_file.seek(0)
-    vtt_filename = f"{audio_file.filename.split('.')[0]}.vtt"
+    vtt_filename = f"{uuid.uuid4()}.vtt"
     return StreamingResponse(vtt_file, media_type="text/plain", 
                              headers={'Content-Disposition': f'attachment; filename="{vtt_filename}"'})
 
