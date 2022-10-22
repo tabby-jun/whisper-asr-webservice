@@ -18,11 +18,6 @@ app = FastAPI()
 
 model_name= os.getenv("ASR_MODEL", "base")
 
-if torch.cuda.is_available():
-    model = whisper.load_model(model_name).cuda()
-else:
-    model = whisper.load_model(model_name)
-
 model_lock = Lock()
 
 @app.post("/asr")
@@ -98,9 +93,17 @@ def run_asr(file: BinaryIO, task: Union[str, None], language: Union[str, None] )
     audio = load_audio(file)
     options_dict = {"task" : task}
     if language:
-        options_dict["language"] = language    
+        options_dict["language"] = language
+
+    if torch.cuda.is_available():
+        model = whisper.load_model(model_name).cuda()
+    else:
+        model = whisper.load_model(model_name)
+
     with model_lock:   
         result = model.transcribe(audio, **options_dict)
+
+    del model
         
     return result
 
