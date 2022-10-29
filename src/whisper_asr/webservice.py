@@ -21,6 +21,8 @@ model_name= os.getenv("ASR_MODEL", "base")
 
 model_lock = Lock()
 
+model = get_model()
+
 @app.post("/asr")
 def transcribe_file(
                 audio_file: UploadFile = File(...),
@@ -46,9 +48,9 @@ def language_detection(
 
     # detect the spoken language
     with model_lock:
-        model = get_model()
+        #model = get_model()
         _, probs = model.detect_language(mel)
-        del model
+        #del model
 
     detected_lang_code = max(probs, key=probs.get)
     
@@ -104,9 +106,9 @@ def run_asr(file: BinaryIO, task: Union[str, None], language: Union[str, None] )
 
 
     with model_lock:
-        model = get_model()
+        #model = get_model()
         result = model.transcribe(audio, **options_dict)
-        del model
+        #del model
         
     return result
 
