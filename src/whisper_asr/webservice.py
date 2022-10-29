@@ -21,6 +21,14 @@ model_name= os.getenv("ASR_MODEL", "base")
 
 model_lock = Lock()
 
+
+def get_model():
+    if torch.cuda.is_available():
+        return whisper.load_model(model_name).cuda()
+    else:
+        return whisper.load_model(model_name)
+
+
 model = get_model()
 
 @app.post("/asr")
@@ -88,13 +96,6 @@ def result2vtt(
     vtt_filename = f"{uuid.uuid4()}.vtt"
     return StreamingResponse(vtt_file, media_type="text/plain", 
                              headers={'Content-Disposition': f'attachment; filename="{vtt_filename}"'})
-
-
-def get_model():
-    if torch.cuda.is_available():
-        return whisper.load_model(model_name).cuda()
-    else:
-        return whisper.load_model(model_name)
 
 
 def run_asr(file: BinaryIO, task: Union[str, None], language: Union[str, None] ):
