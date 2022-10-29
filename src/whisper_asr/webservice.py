@@ -41,18 +41,15 @@ def language_detection(
     audio = load_audio(audio_file.file)
     audio = whisper.pad_or_trim(audio)
 
-    if torch.cuda.is_available():
-        model = whisper.load_model(model_name).cuda()
-    else:
-        model = whisper.load_model(model_name)
-
     # make log-Mel spectrogram and move to the same device as the model
     mel = whisper.log_mel_spectrogram(audio).to(model.device)
 
     # detect the spoken language
     with model_lock:
+        model = get_model()
         _, probs = model.detect_language(mel)
-    del model
+        del model
+
     detected_lang_code = max(probs, key=probs.get)
     
     result = { "detected_language": LANGUAGES[detected_lang_code],
@@ -91,21 +88,25 @@ def result2vtt(
                              headers={'Content-Disposition': f'attachment; filename="{vtt_filename}"'})
 
 
+def get_model():
+    if torch.cuda.is_available():
+        return whisper.load_model(model_name).cuda()
+    else:
+        return whisper.load_model(model_name)
+
+
 def run_asr(file: BinaryIO, task: Union[str, None], language: Union[str, None] ):
     audio = load_audio(file)
     options_dict = {"task" : task}
     if language:
         options_dict["language"] = language
 
-    if torch.cuda.is_available():
-        model = whisper.load_model(model_name).cuda()
-    else:
-        model = whisper.load_model(model_name)
 
-    with model_lock:   
+
+    with model_lock:
+        model = get_model()
         result = model.transcribe(audio, **options_dict)
-
-    del model
+        del model
         
     return result
 
